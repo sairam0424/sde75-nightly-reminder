@@ -3,7 +3,7 @@ name: Nightly DSA Reminder
 
 on:
   schedule:
-    - cron: '30 16 * * *' # 16:30 UTC == 22:00 IST (Asia/Kolkata, no DST)
+    - cron: '23 14 * * *' # 14:23 UTC == 19:53 IST - off-peak minute (:23, not :30) to dodge GH Actions queue contention, and ~2h buffer before the 10pm-midnight solving window so late delivery doesn't land after it's over
   workflow_dispatch: {}
 
 jobs:
