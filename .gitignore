@@ -1,0 +1,9 @@
+.env
+.env.*
+__pycache__/
+*.pyc
+.claude-flow/
+.swarm/
+ruvector.db
+scratch-pad/
+.DS_Store
