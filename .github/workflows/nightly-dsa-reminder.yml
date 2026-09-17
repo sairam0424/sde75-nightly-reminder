@@ -6,16 +6,19 @@ on:
     - cron: '23 14 * * *' # 14:23 UTC == 19:53 IST - off-peak minute (:23, not :30) to dodge GH Actions queue contention, and ~2h buffer before the 10pm-midnight solving window so late delivery doesn't land after it's over
   workflow_dispatch: {}
 
+permissions:
+  contents: read
+
 jobs:
   remind:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
         with:
           python-version: "3.12"
-      - run: pip install requests
+      - run: pip install -r requirements.txt
       - name: Fetch today's problems and notify
         env:
           NOTION_TOKEN: ${{ secrets.NOTION_TOKEN }}

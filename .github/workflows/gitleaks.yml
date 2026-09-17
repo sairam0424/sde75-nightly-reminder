@@ -1,0 +1,27 @@
+# Redundant local secret scan (in addition to GitHub's native secret
+# scanning + push protection, enabled separately in repo settings). This
+# repo's other workflows handle live NOTION_TOKEN/TELEGRAM_BOT_TOKEN secrets.
+name: Gitleaks
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+    branches: [master]
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          fetch-depth: 0
+
+      - uses: gitleaks/gitleaks-action@ff98106e4c7b2bc287b24eaf42907196329070c7 # v2.3.9
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

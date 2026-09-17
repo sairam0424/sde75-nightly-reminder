@@ -1,0 +1,37 @@
+# OSSF Scorecard supply-chain security signal. Free for public repos; results
+# publish to the public Scorecard dataset (deps.dev / scorecard badge).
+name: OSSF Scorecard
+
+on:
+  branch_protection_rule:
+  schedule:
+    - cron: '29 4 * * 3' # weekly, Wednesday 04:29 UTC - off-peak minute
+  push:
+    branches: [master]
+  workflow_dispatch: {}
+
+permissions: read-all
+
+jobs:
+  analysis:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      security-events: write
+      id-token: write
+
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+
+      - uses: ossf/scorecard-action@05b42c624433fc40578a4040d5cf5e36ddca8cde # v2.4.2
+        with:
+          results_file: results.sarif
+          results_format: sarif
+          publish_results: true
+
+      - uses: github/codeql-action/upload-sarif@faaca9a8f6edddba5725ffe5adefdab6669a2eca # v3.38.0
+        with:
+          sarif_file: results.sarif
