@@ -14,6 +14,7 @@ import requests
 from sprint_common import (
     TIMEOUT_SECONDS,
     active_day_rows,
+    describe_bot,
     notion_headers,
     query_open_rows,
     require_env,
@@ -74,6 +75,7 @@ def main() -> None:
     bot_token = require_env("SPRINT_TELEGRAM_BOT_TOKEN")
     chat_id = require_env("TELEGRAM_CHAT_ID")
 
+    print(describe_bot(bot_token))
     last_offset = load_offset()
     updates = get_telegram_updates(bot_token, last_offset + 1 if last_offset else 0)
     if not updates:
