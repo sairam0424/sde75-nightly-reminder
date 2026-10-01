@@ -81,3 +81,19 @@ def send_telegram(bot_token: str, chat_id: str, text: str) -> None:
         timeout=TIMEOUT_SECONDS,
     )
     resp.raise_for_status()
+
+
+def describe_bot(bot_token: str) -> str:
+    """One non-secret log line: which bot this token is, webhook state, queued updates."""
+    base = f"https://api.telegram.org/bot{bot_token}"
+    me = requests.get(f"{base}/getMe", timeout=TIMEOUT_SECONDS)
+    me.raise_for_status()
+    hook = requests.get(f"{base}/getWebhookInfo", timeout=TIMEOUT_SECONDS)
+    hook.raise_for_status()
+    bot = me.json()["result"]
+    info = hook.json()["result"]
+    webhook = "set" if info.get("url") else "none"
+    return (
+        f"Bot @{bot.get('username')} (id {bot.get('id')}), webhook={webhook}, "
+        f"pending_updates={info.get('pending_update_count', 0)}"
+    )

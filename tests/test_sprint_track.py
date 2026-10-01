@@ -121,6 +121,7 @@ class DoneListenerTests(unittest.TestCase):
     def run_main(self, updates: list[dict[str, Any]], open_rows: list[dict[str, Any]]):
         with (
             mock.patch.dict(os.environ, ENV, clear=True),
+            mock.patch.object(sprint_mark_done, "describe_bot", return_value="Bot @test"),
             mock.patch.object(sprint_mark_done, "get_telegram_updates", return_value=updates),
             mock.patch.object(sprint_mark_done, "query_open_rows", return_value=open_rows),
             mock.patch.object(sprint_mark_done, "mark_page_done") as done,
@@ -162,6 +163,20 @@ class DoneListenerTests(unittest.TestCase):
         done, send = self.run_main([update(11, "done")], [])
         done.assert_not_called()
         self.assertIn("already Done", send.call_args.args[2])
+
+
+class DescribeBotTests(unittest.TestCase):
+    def test_reports_username_webhook_and_pending_without_the_token(self) -> None:
+        responses = [
+            FakeResponse({"result": {"id": 8937875818, "username": "sprint_test_bot"}}),
+            FakeResponse({"result": {"url": "", "pending_update_count": 2}}),
+        ]
+        with mock.patch.object(sprint_common.requests, "get", side_effect=responses):
+            line = sprint_common.describe_bot("SECRET-TOKEN")
+        self.assertIn("@sprint_test_bot", line)
+        self.assertIn("webhook=none", line)
+        self.assertIn("pending_updates=2", line)
+        self.assertNotIn("SECRET-TOKEN", line)
 
 
 if __name__ == "__main__":
