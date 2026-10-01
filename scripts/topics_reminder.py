@@ -24,7 +24,15 @@ from sprint_common import (
 
 RECALL_OFFSETS = (3, 7)
 TELEGRAM_LIMIT = 3900
-KIND_ICONS = {"GenAI": "\U0001f916", "Resume": "\U0001f4c4", "Behavioural": "\U0001f5e3"}
+KIND_ICONS = {
+    "GenAI": "\U0001f916",
+    "Resume": "\U0001f4c4",
+    "Behavioural": "\U0001f5e3",
+    "Concept": "\U0001f9e9",
+    "HLD": "\U0001f3d7",
+    "LLD": "\U0001f527",
+    "Resume-tie": "\U0001f4c4",
+}
 
 
 def _plain(prop: dict[str, Any], key: str) -> str:
@@ -93,14 +101,15 @@ def recall_days(active_day: int) -> list[int]:
 
 
 def build_message(
-    todays: list[dict[str, Any]], active_day: int | None, recall_rows: list[dict[str, Any]]
+    todays: list[dict[str, Any]],
+    active_day: int | None,
+    recall_rows: list[dict[str, Any]],
+    title: str = "Interview Topics",
 ) -> str:
     if active_day is None:
-        return (
-            "Topics track complete! Every GenAI, Resume and Stories day is marked Done. \U0001f389"
-        )
+        return f"{html.escape(title)} track complete! Every day is marked Done. \U0001f389"
 
-    lines = [f"<b>Interview Topics — Day {active_day}</b>", ""]
+    lines = [f"<b>{html.escape(title)} — Day {active_day}</b>", ""]
     for row in sorted(todays, key=_slot):
         lines += _item_block(row) + [""]
 
@@ -111,17 +120,38 @@ def build_message(
             lines.append(f"• Day {_day(row)}: {name}")
         lines.append("")
 
-    lines.append("Reply <b>done</b> here when today's three items are finished.")
-    text = "\n".join(lines)
-    if len(text) > TELEGRAM_LIMIT:
-        text = text[: TELEGRAM_LIMIT - 1].rsplit("\n", 1)[0] + "\n…"
-    return text
+    lines.append("Reply <b>done</b> here when today's items are finished.")
+    return "\n".join(lines)
 
 
-def main() -> None:
+def chunk_message(text: str, limit: int = TELEGRAM_LIMIT) -> list[str]:
+    """Split on blank lines (item boundaries) so each Telegram message stays under the limit."""
+    chunks: list[str] = []
+    current = ""
+    for block in text.split("\n\n"):
+        while len(block) > limit:  # a single oversized block: hard split at a line break
+            cut = block.rfind("\n", 0, limit)
+            cut = cut if cut > 0 else limit
+            if current:
+                chunks.append(current)
+                current = ""
+            chunks.append(block[:cut])
+            block = block[cut:].lstrip("\n")
+        candidate = f"{current}\n\n{block}" if current else block
+        if len(candidate) > limit:
+            chunks.append(current)
+            current = block
+        else:
+            current = candidate
+    if current:
+        chunks.append(current)
+    return chunks
+
+
+def main(prefix: str = "TOPICS", title: str = "Interview Topics") -> None:
     notion_token = require_env("NOTION_TOKEN")
-    data_source_id = require_env("TOPICS_DATA_SOURCE_ID")
-    bot_token = require_env("TOPICS_TELEGRAM_BOT_TOKEN")
+    data_source_id = require_env(f"{prefix}_DATA_SOURCE_ID")
+    bot_token = require_env(f"{prefix}_TELEGRAM_BOT_TOKEN")
     chat_id = require_env("TELEGRAM_CHAT_ID")
 
     active_day, todays = active_day_rows(query_open_rows(notion_token, data_source_id))
@@ -130,8 +160,9 @@ def main() -> None:
         if active_day is not None
         else []
     )
-    message = build_message(todays, active_day, recall)
-    send_telegram(bot_token, chat_id, message)
+    message = build_message(todays, active_day, recall, title)
+    for part in chunk_message(message):
+        send_telegram(bot_token, chat_id, part)
     print(message)
 
 

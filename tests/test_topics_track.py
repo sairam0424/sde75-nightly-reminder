@@ -18,6 +18,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "scripts"))
 
 import sprint_common  # noqa: E402
 import topics_mark_done  # noqa: E402
+import sd_mark_done  # noqa: E402
+import sd_reminder  # noqa: E402
 import topics_reminder  # noqa: E402
 
 ENV = {
@@ -95,10 +97,30 @@ class MessageTests(unittest.TestCase):
         self.assertEqual(topics_reminder.recall_days(4), [1])
         self.assertEqual(topics_reminder.recall_days(10), [7, 3])
 
-    def test_completion_message_and_length_cap(self) -> None:
+    def test_completion_message_mentions_the_track_title(self) -> None:
         self.assertIn("complete", topics_reminder.build_message([], None, []))
-        huge = make_row("a", 1, 1, "T", task="x " * 3000)
-        self.assertLessEqual(len(topics_reminder.build_message([huge], 1, [])), 4000)
+        self.assertIn("System Design", topics_reminder.build_message([], None, [], "System Design"))
+
+    def test_title_is_configurable_for_other_tracks(self) -> None:
+        text = topics_reminder.build_message(
+            [make_row("a", 1, 1, "Redis", "Concept")], 1, [], "System Design"
+        )
+        self.assertIn("System Design — Day 1", text)
+        self.assertIn("\U0001f9e9", text)  # Concept icon
+
+    def test_chunking_splits_on_item_boundaries_under_the_limit(self) -> None:
+        rows = [make_row(str(i), 1, i, f"Item {i}", task="word " * 120) for i in range(1, 8)]
+        text = topics_reminder.build_message(rows, 1, [])
+        chunks = topics_reminder.chunk_message(text, limit=1500)
+        self.assertGreater(len(chunks), 1)
+        self.assertTrue(all(len(c) <= 1500 for c in chunks))
+        for i in range(1, 8):  # every item survives, none is dropped
+            self.assertEqual(sum(f"Item {i}" in c for c in chunks), 1)
+
+    def test_chunking_hard_splits_a_single_oversized_block(self) -> None:
+        chunks = topics_reminder.chunk_message("line\n" * 2000, limit=1000)
+        self.assertTrue(all(len(c) <= 1000 for c in chunks))
+        self.assertEqual("".join(chunks).count("line"), 2000)
 
 
 class ReminderMainTests(unittest.TestCase):
@@ -191,6 +213,47 @@ class DoneListenerTests(unittest.TestCase):
         done, send = self.run_main([update(11, "done")], [])
         done.assert_not_called()
         self.assertIn("already Done", send.call_args.args[2])
+
+
+SD_ENV = {
+    "NOTION_TOKEN": "notion-test",
+    "SD_DATA_SOURCE_ID": "ds-sd",
+    "SD_TELEGRAM_BOT_TOKEN": "bot-sd",
+    "TELEGRAM_CHAT_ID": "42",
+}
+
+
+class SystemDesignWrapperTests(unittest.TestCase):
+    def test_reminder_uses_sd_configuration_and_title(self) -> None:
+        rows = [make_row("a", 1, 1, "Redis", "Concept")]
+        with (
+            mock.patch.dict(os.environ, SD_ENV, clear=True),
+            mock.patch.object(
+                sprint_common.requests,
+                "post",
+                side_effect=[FakeResponse({"results": rows}), FakeResponse({})],
+            ) as post,
+        ):
+            sd_reminder.main()
+        calls = post.call_args_list
+        self.assertIn("/data_sources/ds-sd/query", calls[0].args[0])
+        self.assertIn("/botbot-sd/sendMessage", calls[1].args[0])
+        self.assertIn("System Design", calls[1].kwargs["data"]["text"])
+
+    def test_listener_uses_its_own_offset_file(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            state = Path(tmp) / "sd_telegram_offset.json"
+            with (
+                mock.patch.dict(os.environ, SD_ENV, clear=True),
+                mock.patch.object(topics_mark_done, "describe_bot", return_value="Bot @sd"),
+                mock.patch.object(
+                    topics_mark_done, "get_telegram_updates", return_value=[update(7, "hi")]
+                ),
+                mock.patch.object(topics_mark_done, "STATE_DIR", Path(tmp)),
+            ):
+                sd_mark_done.main()
+            self.assertEqual(json.loads(state.read_text())["last_update_id"], 7)
+            self.assertFalse((Path(tmp) / "topics_telegram_offset.json").exists())
 
 
 if __name__ == "__main__":
